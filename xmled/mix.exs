@@ -22,7 +22,8 @@ defmodule XMLed.MixProject do
   defp deps do
     [
       {:nimble_parsec, "~> 1.1.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      {:enum_type, "~> 1.1.0"},
+      {:credo, "~> 1.5", only: [:dev, :test], runtime: false}
     ]
   end
 end

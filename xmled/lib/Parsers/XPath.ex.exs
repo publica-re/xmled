@@ -9,25 +9,31 @@ defmodule XMLed.Parsers.XPath do
   end
 
   def parse_from_string(input) do
-    case parse(input) do
+    case xpath(input) do
       {:ok, doc, _, _, _, _} -> {:ok, doc}
       v -> v
     end
   end
 
   # parsec:XMLed.Parsers.XPath
+
+  defparsecp(:xpath, parsec(:xp_XPath) |> eos())
+
+
   # XPath ::= Expr
   defcombinatorp :xp_XPath,
     parsec(:xp_Expr) |> tag(:xpath)
   # ParamList ::= Param ("," Param)*
   defcombinatorp :xp_ParamList,
     parsec(:xp_Param)
-    |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_Param))))
+    |> ignore(parsec(:xp_S))
+    |> concat(repeat(ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_Param))))
     |> tag(:param_list)
   # Param ::= "$" EQName TypeDeclaration?
   defcombinatorp :xp_Param,
     ignore(string("$"))
     |> concat(parsec(:xp_EQName))
+    |> ignore(parsec(:xp_S))
     |> concat(optional(parsec(:xp_TypeDeclaration)))
     |> tag(:param)
   # FunctionBody ::= EnclosedExpr
@@ -35,13 +41,16 @@ defmodule XMLed.Parsers.XPath do
   # EnclosedExpr ::= "{" Expr "}"
   defcombinatorp :xp_EnclosedExpr,
     ignore(string("{"))
+    |> ignore(parsec(:xp_S))
     |> concat(parsec(:xp_Expr))
+    |> ignore(parsec(:xp_S))
     |> ignore(string("}"))
     |> tag(:enclosed_expr)
   # Expr ::= ExprSingle ("," ExprSingle)*
   defcombinatorp :xp_Expr,
     parsec(:xp_ExprSingle)
-    |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_ExprSingle))))
+    |> ignore(parsec(:xp_S))
+    |> concat(repeat(ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_ExprSingle))))
     |> tag(:expr)
   # ExprSingle ::= ForExpr | LetExpr | QuantifiedExpr | IfExpr | OrExpr
   defcombinatorp :xp_ExprSingle,
@@ -52,43 +61,54 @@ defmodule XMLed.Parsers.XPath do
       parsec(:xp_IfExpr),
       parsec(:xp_OrExpr)
     ])
-    |> tag(:expr_single)
   # ForExpr ::= SimpleForClause "return" ExprSingle
   defcombinatorp :xp_ForExpr,
     parsec(:xp_SimpleForClause)
+    |> ignore(parsec(:xp_S))
     |> ignore(string("return"))
+    |> ignore(parsec(:xp_S))
     |> concat(parsec(:xp_ExprSingle))
     |> tag(:for_expr)
   # SimpleForClause ::= "for" SimpleForBinding ("," SimpleForBinding)*
   defcombinatorp :xp_SimpleForClause,
     ignore(string("for"))
+    |> ignore(parsec(:xp_S))
     |> concat(parsec(:xp_SimpleForBinding))
-    |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_SimpleForBinding))))
+    |> ignore(parsec(:xp_S))
+    |> concat(repeat(ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SimpleForBinding))))
     |> tag(:simple_for_clause)
   # SimpleForBinding ::= "$" VarName "in" ExprSingle
   defcombinatorp :xp_SimpleForBinding,
       ignore(string("$"))
       |> concat(parsec(:xp_VarName))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("in"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ExprSingle))
       |> tag(:simple_for_binding)
   # LetExpr ::= SimpleLetClause "return" ExprSingle
   defcombinatorp :xp_LetExpr,
       parsec(:xp_SimpleLetClause)
+      |> ignore(parsec(:xp_S))
       |> ignore(string("return"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ExprSingle))
       |> tag(:let_expr)
   # SimpleLetClause ::= "let" SimpleLetBinding ("," SimpleLetBinding)*
   defcombinatorp :xp_SimpleLetClause,
       ignore(string("let"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_SimpleLetBinding))
-      |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_SimpleLetBinding))))
+      |> ignore(parsec(:xp_S))
+      |> concat(repeat(ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SimpleLetBinding))))
       |> tag(:simple_let_clause)
   # SimpleLetBinding ::= "$" VarName ":=" ExprSingle
   defcombinatorp :xp_SimpleLetBinding,
       ignore(string("$"))
       |> concat(parsec(:xp_VarName))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(":="))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ExprSingle))
       |> tag(:simple_let_binding)
   # QuantifiedExpr ::= ("some" | "every") "$" VarName "in" ExprSingle ("," "$" VarName "in" ExprSingle)* "satisfies" ExprSingle
@@ -97,90 +117,108 @@ defmodule XMLed.Parsers.XPath do
         string("some") |> replace(:some),
         string("every") |> replace(:every)
       ])
-      |> (ignore(string("$")) |> concat(parsec(:xp_VarName)) |> ignore(string("in")) |> concat(parsec(:xp_ExprSingle)) |> tag(:v_i_e))
-      |> concat(repeat(ignore(string(",")) |> (ignore(string("$")) |> concat(parsec(:xp_VarName)) |> ignore(string("in")) |> concat(parsec(:xp_ExprSingle)) |> tag(:v_i_e))))
+      |> ignore(parsec(:xp_S))
+      |> (ignore(string("$")) |> concat(parsec(:xp_VarName)) |> ignore(parsec(:xp_S)) |> ignore(string("in")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_ExprSingle)) |> tag(:v_i_e))
+      |> ignore(parsec(:xp_S))
+      |> concat(repeat(ignore(string(",")) |> ignore(parsec(:xp_S)) |> (ignore(string("$")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_VarName)) |> ignore(parsec(:xp_S)) |> ignore(string("in")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_ExprSingle)) |> tag(:v_i_e))))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("satisfies"))
+      |> ignore(parsec(:xp_S))
       |> (concat(parsec(:xp_ExprSingle)) |> tag(:satisfies))
       |> tag(:quantified_expr)
   # IfExpr ::= "if" "(" Expr ")" "then" ExprSingle "else" ExprSingle
   defcombinatorp :xp_IfExpr,
       ignore(string("if"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> (concat(parsec(:xp_Expr)) |> tag(:cond))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("then"))
+      |> ignore(parsec(:xp_S))
       |> (concat(parsec(:xp_ExprSingle)) |> tag(:positive))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("else"))
+      |> ignore(parsec(:xp_S))
       |> (concat(parsec(:xp_ExprSingle)) |> tag(:negative))
       |> tag(:if)
   # OrExpr ::= AndExpr ( "or" AndExpr )*
   defcombinatorp :xp_OrExpr,
       parsec(:xp_AndExpr)
-      |> concat(repeat(ignore(string("or")) |> concat(parsec(:xp_AndExpr))))
+      |> ignore(parsec(:xp_S))
+      |> concat(repeat(ignore(string("or")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_AndExpr))))
       |> tag(:or)
   # AndExpr ::= ComparisonExpr ( "and" ComparisonExpr )*
   defcombinatorp :xp_AndExpr,
       parsec(:xp_ComparisonExpr)
-      |> concat(repeat(ignore(string("and")) |> concat(parsec(:xp_ComparisonExpr))))
+      |> ignore(parsec(:xp_S))
+      |> concat(repeat(ignore(string("and")) |> ignore(parsec(:xp_S))  |> concat(parsec(:xp_ComparisonExpr))))
       |> tag(:and)
   # ComparisonExpr ::= StringConcatExpr ( (ValueComp | GeneralComp | NodeComp) StringConcatExpr )?
   defcombinatorp :xp_ComparisonExpr,
       parsec(:xp_StringConcatExpr)
-      |> concat(optional(choice([parsec(:xp_ValueComp), parsec(:xp_GeneralComp), parsec(:xp_NodeComp)]) |> concat(parsec(:xp_StringConcatExpr))))
+      |> ignore(parsec(:xp_S))
+      |> concat(optional(choice([parsec(:xp_ValueComp), parsec(:xp_GeneralComp), parsec(:xp_NodeComp)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_StringConcatExpr))))
       |> tag(:comparison_expr)
   # StringConcatExpr ::= RangeExpr ( "||" RangeExpr )*
   defcombinatorp :xp_StringConcatExpr,
       parsec(:xp_RangeExpr)
+      |> ignore(parsec(:xp_S))
       |> concat(repeat(ignore(string("||") |> concat(parsec(:xp_RangeExpr)))))
+      |> ignore(parsec(:xp_S))
       |> tag(:string_concat_expr)
   # RangeExpr ::= AdditiveExpr ( "to" AdditiveExpr )?
   defcombinatorp :xp_RangeExpr,
       parsec(:xp_AdditiveExpr)
-      |> concat(optional(ignore(string("to")) |> concat(parsec(:xp_AdditiveExpr))))
+      |> ignore(parsec(:xp_S))
+      |> concat(optional(ignore(string("to")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_AdditiveExpr))))
       |> tag(:range_expr)
   # AdditiveExpr ::= MultiplicativeExpr ( ("+" | "-") MultiplicativeExpr )*
   defcombinatorp :xp_AdditiveExpr,
       parsec(:xp_MultiplicativeExpr)
-      |> concat(repeat(choice([string("+") |> replace(:add), string("-") |> replace(:sub)]) |> concat(parsec(:xp_MultiplicativeExpr))))
+      |> concat(repeat(ignore(parsec(:xp_S)) |> choice([string("+") |> replace(:add), string("-") |> replace(:sub)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_MultiplicativeExpr))))
       |> tag(:additive_expr)
   # MultiplicativeExpr ::= UnionExpr ( ("*" | "div" | "idiv" | "mod") UnionExpr )*
   defcombinatorp :xp_MultiplicativeExpr,
       parsec(:xp_UnionExpr)
-      |> concat(repeat(choice([string("*") |> replace(:times), string("div") |> replace(:div), string("idiv") |> replace(:idiv), string("mod") |> replace(:mod)]) |> concat(parsec(:xp_UnionExpr))))
+      |> concat(repeat(ignore(parsec(:xp_S)) |> choice([string("*") |> replace(:times), string("div") |> replace(:div), string("idiv") |> replace(:idiv), string("mod") |> replace(:mod)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_UnionExpr))))
       |> tag(:multiplicative_expr)
   # UnionExpr ::= IntersectExceptExpr ( ("union" | "|") IntersectExceptExpr )*
   defcombinatorp :xp_UnionExpr,
       parsec(:xp_IntersectExceptExpr)
-      |> concat(repeat(choice([string("union") |> replace(:union), string("|") |> replace(:union)]) |> concat(parsec(:xp_IntersectExceptExpr))))
+      |> concat(repeat(ignore(parsec(:xp_S)) |> choice([string("union") |> replace(:union), string("|") |> replace(:union)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_IntersectExceptExpr))))
       |> tag(:union_expr)
   # IntersectExceptExpr ::= InstanceofExpr ( ("intersect" | "except") InstanceofExpr )*
   defcombinatorp :xp_IntersectExceptExpr,
       parsec(:xp_InstanceofExpr)
-      |> concat(repeat(choice([string("intersect") |> replace(:intersect), string("except") |> replace(:except)]) |> concat(parsec(:xp_InstanceofExpr))))
+      |> concat(repeat(ignore(parsec(:xp_S)) |> choice([string("intersect") |> replace(:intersect), string("except") |> replace(:except)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_InstanceofExpr))))
       |> tag(:intersect_except_expr)
   # InstanceofExpr ::= TreatExpr ( "instance" "of" SequenceType )?
   defcombinatorp :xp_InstanceofExpr,
       parsec(:xp_TreatExpr)
-      |> concat(optional(ignore(string("instance")) |> ignore(string("of")) |> concat(parsec(:xp_SequenceType))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string("instance")) |> ignore(parsec(:xp_S)) |> ignore(string("of")) |> concat(parsec(:xp_SequenceType))))
       |> tag(:instanceof_expr)
   # TreatExpr ::= CastableExpr ( "treat" "as" SequenceType )?
   defcombinatorp :xp_TreatExpr,
       parsec(:xp_CastableExpr)
-      |> concat(optional(ignore(string("treat")) |> ignore(string("as")) |> concat(parsec(:xp_SequenceType))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string("treat")) |> ignore(parsec(:xp_S)) |> ignore(string("as")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SequenceType))))
       |> tag(:treat_expr)
   # CastableExpr ::= CastExpr ( "castable" "as" SingleType )?
   defcombinatorp :xp_CastableExpr,
       parsec(:xp_CastExpr)
-      |> concat(optional(ignore(string("castable")) |> ignore(string("as")) |> concat(parsec(:xp_SingleType))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string("castable")) |> ignore(parsec(:xp_S)) |> ignore(string("as")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SingleType))))
       |> tag(:castable_expr)
   # CastExpr ::= UnaryExpr ( "cast" "as" SingleType )?
   defcombinatorp :xp_CastExpr,
       parsec(:xp_UnaryExpr)
-      |> concat(optional(ignore(string("cast")) |> ignore(string("as")) |> concat(parsec(:xp_SingleType))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string("cast")) |> ignore(parsec(:xp_S)) |> ignore(string("as")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SingleType))))
       |> tag(:cast_expr)
   # UnaryExpr ::= ("-" | "+")* ValueExpr
   defcombinatorp :xp_UnaryExpr,
       repeat(choice([string("-") |> replace(:minus), string("+") |> replace(:plus)]))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ValueExpr))
       |> tag(:unary_expr)
   # ValueExpr ::= SimpleMapExpr
@@ -220,26 +258,27 @@ defmodule XMLed.Parsers.XPath do
   # SimpleMapExpr ::= PathExpr ("!" PathExpr)*
   defcombinatorp :xp_SimpleMapExpr,
       parsec(:xp_PathExpr)
-      |> concat(repeat(ignore(string("!")) |> concat(parsec(:xp_PathExpr))))
+      |> concat(repeat(ignore(parsec(:xp_S)) |> ignore(string("!")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_PathExpr))))
       |> tag(:simple_map_expr)
   # PathExpr ::= ("/" RelativePathExpr?) | ("//" RelativePathExpr) | RelativePathExpr 	/* xgc: leading-lone-slash */
   defcombinatorp :xp_PathExpr,
       choice([
-        string("//") |> replace(:root_descendant) |> concat(parsec(:xp_RelativePathExpr)),
-        string("/") |> replace(:root) |> concat(parsec(:xp_RelativePathExpr)),
-        concat(parsec(:xp_RelativePathExpr)),
+        string("//") |> ignore(parsec(:xp_S)) |> replace(:root_descendant) |> concat(parsec(:xp_RelativePathExpr)),
+        string("/") |> ignore(parsec(:xp_S)) |> replace(:root) |> concat(parsec(:xp_RelativePathExpr)),
+        parsec(:xp_RelativePathExpr),
       ])
       |> tag(:path_expr)
   # RelativePathExpr ::= StepExpr (("/" | "//") StepExpr)*
   defcombinatorp :xp_RelativePathExpr,
       parsec(:xp_StepExpr)
-      |> concat(repeat(choice([string("//") |> replace(:descendant), string("/") |> replace(:child)]) |> concat(parsec(:xp_StepExpr))))
+      |> ignore(parsec(:xp_S))
+      |> concat(repeat(choice([string("//")  |> replace(:descendant), string("/") |> replace(:child)]) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_StepExpr))))
       |> tag(:relative_path_expr)
   # StepExpr ::= PostfixExpr | AxisStep
   defcombinatorp :xp_StepExpr,
       choice([
         parsec(:xp_PostfixExpr),
-        parsec(:xp_AxisExpr)
+        parsec(:xp_AxisStep)
       ])
       |> tag(:step_expr)
   # AxisStep ::= (ReverseStep | ForwardStep) PredicateList
@@ -248,12 +287,13 @@ defmodule XMLed.Parsers.XPath do
         parsec(:xp_ReverseStep),
         parsec(:xp_ForwardStep)
       ])
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_PredicateList))
       |> tag(:axis_step)
   # ForwardStep ::= (ForwardAxis NodeTest) | AbbrevForwardStep
   defcombinatorp :xp_ForwardStep,
       choice([
-        parsec(:xp_ForwardSAxis) |> concat(parsec(:xp_NodeTest)),
+        parsec(:xp_ForwardAxis) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_NodeTest)),
         parsec(:xp_AbbrevForwardStep)
       ])
       |> tag(:forward_step)
@@ -269,11 +309,12 @@ defcombinatorp :xp_ForwardAxis,
         string("following") |> replace(:following),
         string("namespace") |> replace(:namespace)
       ])
+      |> ignore(parsec(:xp_S))
       |> ignore(string("::"))
       |> tag(:forward_axis)
   # AbbrevForwardStep ::= "@"? NodeTest
   defcombinatorp :xp_AbbrevForwardStep,
-      optional(string("@") |> replace(:attribute))
+      optional(string("@") |> replace(:attribute) |> ignore(parsec(:xp_S)))
       |> concat(parsec(:xp_NodeTest))
       |> tag(:abbrev_forward_step)
   # ReverseStep ::= (ReverseAxis NodeTest) | AbbrevReverseStep
@@ -286,12 +327,13 @@ defcombinatorp :xp_ForwardAxis,
   # ReverseAxis ::= ("parent" "::") | ("ancestor" "::") | ("preceding-sibling" "::") | ("preceding" "::") | ("ancestor-or-self" "::")
   defcombinatorp :xp_ReverseAxis,
       choice([
-        string("parent") |> replace(:parent)
-        string("ancestor") |> replace(:ancestor)
-        string("preceding-sibling") |> replace(:preceding_sibling)
-        string("preceding") |> replace(:preceding)
+        string("parent") |> replace(:parent),
+        string("ancestor") |> replace(:ancestor),
+        string("preceding-sibling") |> replace(:preceding_sibling),
+        string("preceding") |> replace(:preceding),
         string("ancestor-or-self") |> replace(:ancestor_or_self)
       ])
+      |> ignore(parsec(:xp_S))
       |> ignore(string("::"))
       |> tag(:reverse_axis)
   # AbbrevReverseStep ::= ".."
@@ -308,7 +350,7 @@ defcombinatorp :xp_ForwardAxis,
   # NameTest ::= EQName | Wildcard
   defcombinatorp :xp_NameTest,
       choice([
-        parsec(:xp_EqName),
+        parsec(:xp_EQName),
         parsec(:xp_Wildcard)
       ])
       |> tag(:name_test)
@@ -316,19 +358,21 @@ defcombinatorp :xp_ForwardAxis,
   defcombinatorp :xp_Wildcard,
       choice([
         string("*") |> replace(:wildcard),
-        parsec(:xp_NCName) |> ignore(string(":")) |> ignore(string("*")) |> tag(:suffix_wildcard),
-        ignore(string("*")) |> ignore(string(":")) |> concat(parsec(:xp_NCName)) |> tag(:prefix_wildcard),
-        parsec(:xp_BracedURILiteral) |> ignore(string("*")) |> tag(:braceduri_wildcard)
+        parsec(:xp_NCName) |> ignore(parsec(:xp_S)) |> ignore(string(":")) |> ignore(parsec(:xp_S)) |> ignore(string("*")) |> tag(:suffix_wildcard),
+        ignore(string("*")) |> ignore(parsec(:xp_S)) |> ignore(string(":")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_NCName)) |> tag(:prefix_wildcard),
+        parsec(:xp_BracedURILiteral) |> ignore(parsec(:xp_S)) |> ignore(string("*")) |> tag(:braceduri_wildcard)
       ])
   # PostfixExpr ::= PrimaryExpr (Predicate | ArgumentList)*
   defcombinatorp :xp_PostfixExpr,
       parsec(:xp_PrimaryExpr)
+      |> ignore(parsec(:xp_S))
       |> concat(repeat(choice([parsec(:xp_Predicate), parsec(:xp_ArgumentList)])))
       |> tag(:postfix_expr)
   # ArgumentList ::= "(" (Argument ("," Argument)*)? ")"
   defcombinatorp :xp_ArgumentList,
       ignore(string("("))
-      |> concat(optional(parsec(:xp_Argument) |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_Argument))))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> parsec(:xp_Argument) |> concat(repeat(ignore(parsec(:xp_S)) |> ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_Argument))))))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:argument_list)
   # PredicateList ::= Predicate*
@@ -338,7 +382,9 @@ defcombinatorp :xp_ForwardAxis,
   # Predicate ::= "[" Expr "]"
   defcombinatorp :xp_Predicate,
       ignore(string("["))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_Expr))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("]"))
       |> tag(:predicate)
   # PrimaryExpr ::= Literal | VarRef | ParenthesizedExpr | ContextItemExpr | FunctionCall | FunctionItemExpr
@@ -363,7 +409,7 @@ defcombinatorp :xp_ForwardAxis,
   # NumericLiteral ::= IntegerLiteral | DecimalLiteral | DoubleLiteral
   defcombinatorp :xp_NumericLiteral,
       choice([
-        parsec(:xp_IntergerLiteral),
+        parsec(:xp_IntegerLiteral),
         parsec(:xp_DecimalLiteral),
         parsec(:xp_DoubleLiteral)
       ])
@@ -380,7 +426,8 @@ defcombinatorp :xp_ForwardAxis,
   # ParenthesizedExpr ::= "(" Expr? ")"
   defcombinatorp :xp_ParenthesizedExpr,
       ignore(string("("))
-      |> concat(optional(parsec(:xp_Expr)))
+      |> ignore(parsec(:xp_S))
+      |> concat(optional(parsec(:xp_Expr) |> ignore(parsec(:xp_S))))
       |> ignore(string(")"))
       |> tag(:parenthesized_expr)
   # ContextItemExpr ::= "."
@@ -389,6 +436,7 @@ defcombinatorp :xp_ForwardAxis,
   # FunctionCall ::= EQName ArgumentList
   defcombinatorp :xp_FunctionCall,
       parsec(:xp_EQName)
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ArgumentList))
       |> tag(:function_call)
   # Argument ::= ExprSingle | ArgumentPlaceholder
@@ -405,39 +453,45 @@ defcombinatorp :xp_ForwardAxis,
   defcombinatorp :xp_FunctionItemExpr,
       choice([
         parsec(:xp_NamedFunctionRef),
-        parsce(:xp_InlineFunctionExpr)
+        parsec(:xp_InlineFunctionExpr)
       ])
       |> tag(:function_item_expr)
   # NamedFunctionRef ::= EQName "#" IntegerLiteral
   defcombinatorp :xp_NamedFunctionRef,
       parsec(:xp_EQName)
+      |> ignore(parsec(:xp_S))
       |> ignore(string("#"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_IntegerLiteral))
       |> tag(:named_function_ref)
   # InlineFunctionExpr ::= "function" "(" ParamList? ")" ("as" SequenceType)? FunctionBody
   defcombinatorp :xp_InlineFunctionExpr,
       ignore(string("function"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(parsec(:xp_ParamList)))
+      |> ignore(parsec(:xp_S))
+      |> concat(optional(parsec(:xp_ParamList) |> ignore(parsec(:xp_S))))
       |> ignore(string(")"))
-      |> concat(optional(ignore(string("as")) |> concat(parsec(:xp_SequenceType))))
+      |> ignore(parsec(:xp_S))
+      |> concat(optional(ignore(string("as")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SequenceType)) |> ignore(parsec(:xp_S))))
       |> concat(parsec(:xp_FunctionBody))
       |> tag(:inline_function_expr)
   # SingleType ::= SimpleTypeName "?"?
   defcombinatorp :xp_SingleType,
       parsec(:xp_SimpleTypeName)
-      |> concat(optional(string("?") |> replace(:optional)))
+      |> concat(optional(ignore(parsec(:xp_S)) |> string("?") |> replace(:optional)))
       |> tag(:single_type)
   # TypeDeclaration ::= "as" SequenceType
   defcombinatorp :xp_TypeDeclaration,
       ignore(string("as"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_SequenceType))
       |> tag(:type_declaration)
   # SequenceType ::= ("empty-sequence" "(" ")") | (ItemType OccurrenceIndicator?)
   defcombinatorp :xp_SequenceType,
       choice([
-        string("empty-sequence") |> replace(:empty_sequence) |> ignore(string("(")) |> ignore(string(")")),
-        parsec(:xp_ItemType) |> concat(optional(parsec(:xp_OccurenceIndicator)))
+        string("empty-sequence") |> replace(:empty_sequence) |> ignore(parsec(:xp_S)) |> ignore(string("(")) |> ignore(parsec(:xp_S)) |> ignore(string(")")),
+        parsec(:xp_ItemType) |> ignore(parsec(:xp_S)) |> concat(optional(parsec(:xp_OccurenceIndicator)))
       ])
       |> tag(:sequence_type)
   # OccurrenceIndicator ::= "?" | "*" | "+"
@@ -452,7 +506,7 @@ defcombinatorp :xp_ForwardAxis,
   defcombinatorp :xp_ItemType,
       choice([
         parsec(:xp_KindTest),
-        string("item") |> replace(:item) |> ignore(string("(")) |> ignore(string(")")),
+        string("item") |> replace(:item) |> ignore(parsec(:xp_S)) |> ignore(string("(")) |> ignore(parsec(:xp_S)) |> ignore(string(")")),
         parsec(:xp_FunctionTest),
         parsec(:xp_AtomicOrUnionType),
         parsec(:xp_ParenthesizedItemType)
@@ -480,46 +534,60 @@ defcombinatorp :xp_ForwardAxis,
   # AnyKindTest ::= "node" "(" ")"
   defcombinatorp :xp_AnyKindTest,
       ignore(string("node"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:any_kind_tag)
   # DocumentTest ::= "document-node" "(" (ElementTest | SchemaElementTest)? ")"
   defcombinatorp :xp_DocumentTest,
       ignore(string("document-node"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(choice([parsec(:xp_ElementTest), parsec(:xp_SchemaElementTest)])))
+      |> concat(optional(ignore(parsec(:xp_S)) |> choice([parsec(:xp_ElementTest), parsec(:xp_SchemaElementTest)])))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:document_test)
   # TextTest ::= "text" "(" ")"
   defcombinatorp :xp_TextTest,
       ignore(string("text"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:text_test)
   # CommentTest ::= "comment" "(" ")"
   defcombinatorp :xp_CommentTest,
       ignore(string("comment"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:comment_test)
   # NamespaceNodeTest ::= "namespace-node" "(" ")"
-  defcombinatorp :xp_CommentTest,
+  defcombinatorp :xp_NamespaceNodeTest,
       ignore(string("namespace-node"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:namespace_node_test)
   # PITest ::= "processing-instruction" "(" (NCName | StringLiteral)? ")"
-  defcombinatorp :xp_DocumentTest,
+  defcombinatorp :xp_PITest,
       ignore(string("processing-instruction"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(choice([parsec(:xp_NCName), parsec(:xp_StringLiteral)])))
+      |> concat(optional(ignore(parsec(:xp_S)) |> choice([parsec(:xp_NCName), parsec(:xp_StringLiteral)])))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:pi_test)
   # AttributeTest ::= "attribute" "(" (AttribNameOrWildcard ("," TypeName)?)? ")"
   defcombinatorp :xp_AttributeTest,
       ignore(string("attribute"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(parsec(:xp_AttribNameOrWildcard) |> concat(optional(ignore(string(",") |> concat(parsec(:xp_TypeName)))))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> parsec(:xp_AttribNameOrWildcard) |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string(",") |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_TypeName)))))))
+      |> ignore(parsec(:xp_S))
       |> tag(:attribute_test)
   # AttribNameOrWildcard ::= AttributeName | "*"
   defcombinatorp :xp_AttribNameOrWildcard,
@@ -531,8 +599,11 @@ defcombinatorp :xp_ForwardAxis,
   # SchemaAttributeTest ::= "schema-attribute" "(" AttributeDeclaration ")"
   defcombinatorp :xp_SchemaAttributeTest,
       ignore(string("schema-attribute"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_AttributeDeclaration))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:schema_attribute_test)
   # AttributeDeclaration ::= AttributeName
@@ -542,8 +613,10 @@ defcombinatorp :xp_ForwardAxis,
   # ElementTest ::= "element" "(" (ElementNameOrWildcard ("," TypeName "?"?)?)? ")"
   defcombinatorp :xp_ElementTest,
       ignore(string("element"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(parsec(:xp_ElementNameOrWildcard) |> concat(optional(ignore(string(",")) |> concat(parsec(:xp_TypeName)) |> concat(optional(string("?") |> replace(:optional)))))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> parsec(:xp_ElementNameOrWildcard) |> concat(optional(ignore(parsec(:xp_S)) |> ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_TypeName)) |> concat(ignore(parsec(:xp_S)) |> optional(string("?") |> replace(:optional)))))))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:element_test)
   # ElementNameOrWildcard ::= ElementName | "*"
@@ -556,8 +629,11 @@ defcombinatorp :xp_ForwardAxis,
   # SchemaElementTest ::= "schema-element" "(" ElementDeclaration ")"
   defcombinatorp :xp_SchemaElementTest,
       ignore(string("schema-element"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ElementDeclaration))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:schema_element_test)
   # ElementDeclaration ::= ElementName
@@ -590,28 +666,36 @@ defcombinatorp :xp_ForwardAxis,
   # AnyFunctionTest ::= "function" "(" "*" ")"
   defcombinatorp :xp_AnyFunctionTest,
       ignore(string("function"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("*"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:any_function_test)
   # TypedFunctionTest ::= "function" "(" (SequenceType ("," SequenceType)*)? ")" "as" SequenceType
   defcombinatorp :xp_TypedFunctionTest,
       ignore(string("function"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("("))
-      |> concat(optional(parsec(:xp_SequenceType) |> concat(repeat(ignore(string(",")) |> concat(parsec(:xp_SequenceType))))))
+      |> concat(optional(ignore(parsec(:xp_S)) |> parsec(:xp_SequenceType) |> concat(repeat(ignore(parsec(:xp_S)) |> ignore(string(",")) |> ignore(parsec(:xp_S)) |> concat(parsec(:xp_SequenceType))))))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("as"))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_SequenceType))
       |> tag(:typed_function_test)
   # ParenthesizedItemType ::= "(" ItemType ")"
   defcombinatorp :xp_ParenthesizedItemType,
       ignore(string("("))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_ItemType))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(")"))
       |> tag(:parenthesized_item_type)
   # EQName ::= QName | URIQualifiedName
   defcombinatorp :xp_EQName,
       choice([
-        parsec(:x_QName),
+        parsec(:xp_QName),
         parsec(:xp_URIQualifiedName)
       ])
       |> tag(:EQ_name)
@@ -622,24 +706,26 @@ defcombinatorp :xp_ForwardAxis,
   # DecimalLiteral ::= ("." Digits) | (Digits "." [0-9]*)
   defcombinatorp :xp_DecimalLiteral,
       choice([
-        ignore(string(".")) |> replace(:decimal) |> concat(parsec(:xp_Digits)),
-        concat(parsec(:xp_Digits)) |> concat(ignore(string(".")) |> replace(:decimal)) |> concat(repeat(utf8_char([?0..?9])))
+        ignore(string(".")) |> ignore(parsec(:xp_S)) |> replace(:decimal) |> concat(parsec(:xp_Digits)),
+        parsec(:xp_Digits) |> ignore(parsec(:xp_S)) |> concat(ignore(string("."))|> ignore(parsec(:xp_S)) |> replace(:decimal)) |> concat(repeat(utf8_char([?0..?9])))
       ])
       |> tag(:decimal_literal)
   # DoubleLiteral ::= (("." Digits) | (Digits ("." [0-9]*)?)) [eE] [+-]? Digits
   defcombinatorp :xp_DoubleLiteral,
       choice([
-        ignore(string(".")) |> replace(:decimal) |> concat(parsec(:xp_Digits)),
-        concat(parsec(:xp_Digits)) |> concat(optional(concat(ignore(string(".")) |> replace(:decimal)) |> concat(repeat(utf8_char([?0..?9])))))
+        ignore(string(".")) |> ignore(parsec(:xp_S)) |> replace(:decimal) |> concat(parsec(:xp_Digits)),
+        parsec(:xp_Digits) |> ignore(parsec(:xp_S)) |> concat(optional(ignore(string("."))  |> replace(:decimal) |> ignore(parsec(:xp_S)) |> concat(repeat(utf8_char([?0..?9])))))
       ])
+      |> ignore(parsec(:xp_S))
       |> concat(utf8_char([?e, ?E]) |> replace(:exponential))
+      |> ignore(parsec(:xp_S))
       |> concat(parsec(:xp_Digits))
       |> tag(:double_literal)
   # StringLiteral ::= ('"' (EscapeQuot | [^"])* '"') | ("'" (EscapeApos | [^'])* "'")
   defcombinatorp :xp_StringLiteral,
       choice([
-        ignore(string("\"")) |> concat(choice([parsec(:xp_EscapeQuot), utf8_char([not: ?"])])) |> ignore(string("\"")),
-        ignore(string("'")) |> concat(choice([parsec(:xp_EscapeQuot), utf8_char([not: ?'])])) |> ignore(string("'"))
+        ignore(string("\"")) |> concat(repeat(choice([parsec(:xp_EscapeQuot), utf8_char([not: ?"])]))) |> ignore(string("\"")),
+        ignore(string("'")) |> concat(repeat(choice([parsec(:xp_EscapeQuot), utf8_char([not: ?'])]))) |> ignore(string("'"))
       ])
       |> tag(:string_literal)
   # URIQualifiedName ::= BracedURILiteral NCName
@@ -650,8 +736,11 @@ defcombinatorp :xp_ForwardAxis,
   # BracedURILiteral ::= "Q" "{" [^{}]* "}"
   defcombinatorp :xp_BracedURILiteral,
       ignore(string("Q"))
+      |> ignore(parsec(:xp_S))
       |> ignore(string("{"))
+      |> ignore(parsec(:xp_S))
       |> concat(repeat(utf8_char([not: ?{, not: ?}])))
+      |> ignore(parsec(:xp_S))
       |> reduce({List, :to_string, []})
       |> ignore(string("}"))
       |> tag(:braced_uri_literal)
@@ -664,7 +753,9 @@ defcombinatorp :xp_ForwardAxis,
   # Comment ::= "(:" (CommentContents | Comment)* ":)"
   defcombinatorp :xp_Comment,
       ignore(string("(:"))
+      |> ignore(parsec(:xp_S))
       |> concat(repeat(choice([parsec(:xp_CommentContents), parsec(:xp_Comment)])))
+      |> ignore(parsec(:xp_S))
       |> ignore(string(":)"))
       |> tag(:comment)
   # Digits ::= [0-9]+
@@ -686,7 +777,9 @@ defcombinatorp :xp_ForwardAxis,
   # PrefixedName ::= Prefix ':' LocalPart
   defcombinatorp :xp_PrefixedName,
       parsec(:xp_Prefix)
+      |> ignore(parsec(:xp_S))
       |> ignore(string(":"))
+      |> ignore(parsec(:xp_S))
       |> parsec(:xp_LocalPart)
       |> tag(:prefixed_name)
   # UnprefixedName ::= LocalPart
@@ -723,7 +816,7 @@ defcombinatorp :xp_ForwardAxis,
 
   # S ::= (#x20 | #x9 | #xD | #xA)+
   defcombinatorp :xp_S,
-      times(utf8_char([0x20, 0x9, 0xD, 0xA]), min: 1)
+      repeat(utf8_char([0x20, 0x9, 0xD, 0xA]))
 
 
   # parsec:XMLed.Parsers.XPath
