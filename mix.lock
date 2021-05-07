@@ -1,0 +1,5 @@
+%{
+  "combine": {:hex, :combine, "0.10.0", "eff8224eeb56498a2af13011d142c5e7997a80c8f5b97c499f84c841032e429f", [:mix], [], "hexpm", "1b1dbc1790073076580d0d1d64e42eae2366583e7aecd455d1215b0d16f2451b"},
+  "nanoid": {:hex, :nanoid, "2.0.4", "97940eab65d3fc06822f85acd2e97eb5f8f520987a962eeb06fdd3dc621f046b", [:mix], [], "hexpm", "8d8f71a76a769be8d4200ebff1681e47a4d9e6d6ae0566f7f41056564241f4c5"},
+  "nimble_parsec": {:hex, :nimble_parsec, "1.1.0", "3a6fca1550363552e54c216debb6a9e95bd8d32348938e13de5eda962c0d7f89", [:mix], [], "hexpm", "08eb32d66b706e913ff748f11694b17981c0b04a33ef470e33e11b3d3ac8f54b"},
+}
